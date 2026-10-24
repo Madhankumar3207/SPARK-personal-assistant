@@ -7,3 +7,16 @@ memory/memory.json
 skills/learned_skills.json
 data/tasks.json
 *.xlsx
+build/
+dist/
+*.spec
+data/*.sqlite3
+data/*.sqlite3-*
+data/whatsapp/
+*.log
+node_modules/
+frontend/dist/
+.test-deps/
+android/.gradle/
+android/local.properties
+android/**/build/

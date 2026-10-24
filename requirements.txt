@@ -1,0 +1,8 @@
+openpyxl
+SpeechRecognition
+PyAudio
+pyinstaller
+PySide6
+fastapi
+uvicorn
+python-multipart

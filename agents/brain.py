@@ -24,6 +24,9 @@ def understand_command(command):
     original_text = command.strip()
     command = original_text.lower()
 
+    if not command:
+        return {"action": "UNKNOWN", "original_command": ""}
+
     if pending_file_delete:
         if command in {"yes", "yes delete it", "confirm", "go ahead", "delete it"}:
             pending_file_delete = False
@@ -31,6 +34,8 @@ def understand_command(command):
         if command in {"no", "cancel", "don't delete", "stop"}:
             pending_file_delete = False
             return {"action": "FILE_DELETE_CANCEL"}
+        # A confirmation must apply only to the immediately pending action.
+        pending_file_delete = False
 
     if pending_task_clear:
         if command in {"yes", "confirm", "go ahead"}:
@@ -39,6 +44,7 @@ def understand_command(command):
         if command in {"no", "cancel", "stop"}:
             pending_task_clear = False
             return {"action": "TASK_CLEAR_ALL_CANCEL"}
+        pending_task_clear = False
 
     mode_controls = {
         "voice on": ("voice", True),
@@ -170,22 +176,20 @@ def understand_command(command):
     # EXIT
     # -------------------------------------------------
 
-    if command in [
-        "exit",
-        "quit",
-        "bye",
-        "exit spark",
-        "quit spark",
-        "bye spark"
-    ]:
+    if command in ["exit", "quit", "exit spark", "quit spark"]:
         return {
             "action": "EXIT"
         }
 
+    if command in {"bye", "bye spark"}:
+        return {"action": "CONVERSATION", "type": "BYE"}
+
     if command in {
-        "shutdown computer", "restart computer", "lock computer", "sleep computer",
-        "hibernate computer", "sign out", "sign out computer",
-    }:
+        "shutdown", "shut down", "shutdown computer", "shut down computer",
+        "restart", "restart computer", "reboot computer", "lock", "lock computer",
+        "sleep", "sleep computer", "hibernate", "hibernate computer",
+        "sign out", "sign out computer", "log out", "log out computer",
+    } or re.match(r"^(?:(?:shut ?down|restart|reboot|lock|sleep|hibernate|sign out|log out) (?:my )?(?:computer|pc|laptop)|turn off (?:my )?(?:computer|pc|laptop))$", command):
         return {"action": "POWER_CONTROL_DISABLED"}
 
     # -------------------------------------------------
@@ -373,7 +377,7 @@ def understand_command(command):
     # PATTERN ANALYSIS
     # -------------------------------------------------
 
-    if "pattern" in command or "analyze" in command:
+    if "pattern" in command or "analyze" in command or "analyse" in command:
 
         return {
             "action": "PATTERN_ANALYSIS",
@@ -394,6 +398,25 @@ def understand_command(command):
 
     if command == "open a website":
         return {"action": "OPEN_WEBSITE_URL", "url": ""}
+
+    # File searches are deterministic and take precedence over browser search.
+    if re.match(r"^(?:find|search for|search|show)\b", command):
+        search_text = re.sub(r"^(?:find|search(?:\s+for)?|show)(?:\s+for)?\s+", "", command).strip()
+        find_open = re.match(r"^(.+?)\s+and\s+open(?:\s+it)?$", search_text)
+        if find_open:
+            return {"action": "SEARCH_AND_OPEN_FILE", "description": re.sub(r"^(?:my|the|a|an)\s+", "", find_open.group(1)).strip()}
+        file_type = None
+        if re.search(r"\bpdfs?\b", search_text):
+            file_type = "pdf"
+        elif re.search(r"\b(?:images?|photos?)\b", search_text):
+            file_type = "image"
+        elif re.search(r"\bvideos?\b", search_text):
+            file_type = "video"
+        elif re.search(r"\b(?:audio|audios|music)\b", search_text):
+            file_type = "audio"
+        description = re.sub(r"\b(?:pdfs?|images?|photos?|videos?|audios?|music|files?)\b", "", search_text).strip()
+        if file_type or description:
+            return {"action": "SEARCH_FILE", "type": file_type, "date": None, "time": None, "description": re.sub(r"^(?:my|the|a|an)\s+", "", description).strip()}
 
     folder_match = re.match(r"^create (?:a )?folder (?:in|on) (desktop|downloads|documents|pictures|videos|music) (?:called|named) (.+)$", command)
     if folder_match:

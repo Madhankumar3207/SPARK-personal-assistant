@@ -1,4 +1,5 @@
 import re
+import time
 from pathlib import Path
 
 from tools.app_tools import (
@@ -64,33 +65,59 @@ from tools.utility_tools import (
 
 
 last_search_results = []
+last_search_results_at = 0.0
+SEARCH_CONTEXT_TTL_SECONDS = 30 * 60
+
+
+def _remember_search_results(files):
+    global last_search_results, last_search_results_at
+    last_search_results = list(files)
+    last_search_results_at = time.monotonic() if last_search_results else 0.0
 
 
 def open_search_result(target):
     """Open one item from the current, in-memory file-search results."""
-    global last_search_results
+    global last_search_results, last_search_results_at
+    target = str(target).strip()
+    normalized_target = re.sub(r"\s+", " ", target.lower())
+    if last_search_results and time.monotonic() - last_search_results_at > SEARCH_CONTEXT_TTL_SECONDS:
+        _remember_search_results([])
     if not last_search_results:
-        if target.lower() in {"first", "last"} or target.isdigit():
+        if normalized_target in {"first", "last", "latest", "latest one", "newest", "most recent", "that one", "that file"} or normalized_target.isdigit():
             return "Please search for a file first."
         return open_path(target)
 
-    if target.lower() == "first":
+    if normalized_target == "first":
         matches = [last_search_results[0]]
-    elif target.lower() == "last":
+    elif normalized_target == "last":
         matches = [last_search_results[-1]]
-    elif target.isdigit():
-        number = int(target)
+    elif normalized_target in {"first", "second", "third", "fourth", "fifth"}:
+        number = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5}[normalized_target]
+        if number > len(last_search_results):
+            return f"I only found {len(last_search_results)} results."
+        matches = [last_search_results[number - 1]]
+    elif normalized_target in {"latest", "latest one", "newest", "most recent"}:
+        try:
+            matches = [max(last_search_results, key=lambda file: file.stat().st_mtime)]
+        except (OSError, ValueError):
+            return "I couldn't determine which search result is the latest."
+    elif normalized_target in {"that one", "that file", "it"}:
+        if len(last_search_results) != 1:
+            return "Which search result do you mean? Please say open 1, open 2, or open a filename."
+        matches = [last_search_results[0]]
+    elif normalized_target.isdigit():
+        number = int(normalized_target)
         if not 1 <= number <= len(last_search_results):
             return f"I only found {len(last_search_results)} results."
         matches = [last_search_results[number - 1]]
     else:
-        wanted = target.lower()
+        wanted = normalized_target
         matches = [file for file in last_search_results if wanted in file.name.lower()]
         if not matches:
             return "I couldn't find that file in the current results."
 
     if len(matches) > 1:
-        last_search_results = matches
+        _remember_search_results(matches)
         return "I found multiple matching results:\n\n" + "\n".join(
             f"{index}. {file.name}" for index, file in enumerate(matches, 1)
         )
@@ -390,11 +417,9 @@ def execute_action(command):
         if not files:
             return "I couldn't find any matching files."
 
-        last_search_results = files
-        if len(files) == 1:
-            return open_search_result("1")
-
-        return "I found multiple matching files:\n\n" + "\n".join(
+        _remember_search_results(files)
+        count_label = "matching file" if len(files) == 1 else "matching files"
+        return f"I found {len(files)} {count_label}:\n\n" + "\n".join(
             f"{index}. {file.name}" for index, file in enumerate(files, 1)
         ) + "\n\nPlease say open 1, open first, or open last."
 
@@ -465,7 +490,7 @@ def execute_action(command):
         # No results
         if not files:
 
-            last_search_results = []
+            _remember_search_results([])
 
             label = {"image": "photos", "video": "videos", "audio": "audio"}.get(
                 file_type, "files"
@@ -478,7 +503,7 @@ def execute_action(command):
             return f"I couldn't find any matching {label}."
 
 
-        last_search_results = files
+        _remember_search_results(files)
         label = {"image": "photos", "video": "videos", "audio": "audio"}.get(
             file_type, "matching files"
         )
@@ -515,9 +540,12 @@ def execute_action(command):
 
         excel_type = command.get("type")
 
-        # Change this ONLY if your Excel file
-        # is located somewhere else.
-        file_path = Path.home() / "OneDrive" / "Documents" / "test.xlsx"
+        home = Path.home()
+        excel_candidates = (
+            home / "OneDrive" / "Documents" / "test.xlsx",
+            home / "Documents" / "test.xlsx",
+        )
+        file_path = next((candidate for candidate in excel_candidates if candidate.is_file()), excel_candidates[0])
 
         if not file_path.is_file():
             return f"I couldn't find the Excel file at {file_path}."

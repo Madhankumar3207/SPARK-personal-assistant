@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+from config.paths import runtime_file
+
 from tools.app_tools import open_path
 from tools.file_tools import (
     COMMON_FOLDERS,
@@ -15,7 +17,7 @@ from tools.file_tools import (
 )
 
 
-SKILLS_FILE = Path(__file__).resolve().parent.parent / "skills" / "learned_skills.json"
+SKILLS_FILE = runtime_file("skills", "learned_skills.json")
 SAFE_CAPABILITIES = {
     "find_largest_file", "find_most_recent_file", "count_files",
     "average_numbers", "extract_email_addresses", "sort_numbers", "find_and_open",
@@ -31,6 +33,9 @@ def _load_skills():
     try:
         with SKILLS_FILE.open(encoding="utf-8") as file:
             return json.load(file).get("skills", {})
+    except FileNotFoundError:
+        _save_skills({})
+        return {}
     except (OSError, json.JSONDecodeError):
         return {}
 

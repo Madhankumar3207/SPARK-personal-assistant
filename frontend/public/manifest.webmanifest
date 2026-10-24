@@ -1,0 +1,9 @@
+{
+  "name": "SPARK Personal Assistant",
+  "short_name": "SPARK",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090e14",
+  "theme_color": "#0c1118",
+  "icons": [{ "src": "/spark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
